@@ -1,0 +1,10 @@
+{
+  "cli": { "version": ">= 3.0.0" },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_PUBLIC_API_URL": "https://4e74c741eba8.ngrok-free.app" }
+    }
+  }
+}

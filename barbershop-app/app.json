@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Barbershop",
+    "slug": "barbershop",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "icon": "./assets/icon.png",
+    "entryPoint": "expo-router/entry",
+    "plugins": ["expo-router"],
+    "android": {
+      "package": "com.gghsoftware.barbershop",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "extra": {
+      "API_URL": "https://4e74c741eba8.ngrok-free.app",
+      "eas": { "projectId": "208083f8-87b5-4e85-96a7-3d0c641b494f" }
+    }
+  }
+}

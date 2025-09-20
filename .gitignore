@@ -1,0 +1,23 @@
+# Node / Expo
+node_modules/
+.expo/
+.expo-shared/
+npm-debug.log*
+yarn-error.log*
+
+# Env
+.env
+.env.*.local
+
+# iOS / Android build
+ios/Pods/
+ios/build/
+android/.gradle/
+android/.idea/
+android/local.properties
+android/app/build/
+android/build/
+
+# Misc
+.DS_Store
+coverage/
