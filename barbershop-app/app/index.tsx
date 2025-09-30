@@ -206,7 +206,6 @@ export default function Index() {
             <Text style={styles.profileButtonText}>👤</Text>
           </TouchableOpacity>
         </View>
-        
         <View style={styles.statsContainer}>
           <Card style={styles.statCard}>
             <Text style={styles.statNumber}>{countText}</Text>

@@ -4,15 +4,17 @@
     "strict": true,
     "module": "esnext",
     "target": "esnext",
+    "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
+    "types/**/*.d.ts"
   ],
   "exclude": [
     "node_modules"
