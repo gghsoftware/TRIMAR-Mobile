@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "7469ea71-3504-4007-9bf6-07b5e411e36a"
+      }
+    },
+    "android": {
+      "package": "com.arisrobles.trimarmobile"
+    }
+  }
+}

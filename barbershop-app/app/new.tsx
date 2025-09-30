@@ -1,11 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TouchableOpacity, StyleSheet,
   Alert, KeyboardAvoidingView, Platform, ScrollView, FlatList,
   SafeAreaView
 } from "react-native";
 import { router } from "expo-router";
-import api from "../lib/api";
+import { firebaseService } from "../lib/firebaseService";
+import { useAuth } from "../contexts/AuthContext";
+import { Button, Card } from "../components/ui";
+import { Input } from "../components/ui/Input";
+import { Colors, Spacing, BorderRadius, Typography } from "../constants/design";
 
 const today = () => {
   const d = new Date();
@@ -27,6 +31,7 @@ const TIMES = Array.from({ length: (18 - 9) * 2 + 1 }, (_, i) => {
 });
 
 export default function NewBooking() {
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
   const [service, setService] = useState("");
@@ -36,374 +41,464 @@ export default function NewBooking() {
   const [price, setPrice] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  
+  // Validation states
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
+
+  const validateForm = () => {
+    const newErrors: {[key: string]: string} = {};
+    
+    if (!customerName.trim()) {
+      newErrors.customerName = 'Customer name is required';
+    }
+    
+    if (!phone.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!/^09\d{9}$/.test(phone.trim())) {
+      newErrors.phone = 'Please enter a valid Philippine mobile number (09xxxxxxxxx)';
+    }
+    
+    if (!date.trim()) {
+      newErrors.date = 'Date is required';
+    } else {
+      const selectedDate = new Date(date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        newErrors.date = 'Date cannot be in the past';
+      }
+    }
+    
+    if (!time.trim()) {
+      newErrors.time = 'Time is required';
+    }
+    
+    if (price.trim() && isNaN(Number(price))) {
+      newErrors.price = 'Price must be a valid number';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const canSubmit = useMemo(
     () => !!(customerName.trim() && phone.trim() && date.trim() && time.trim()),
     [customerName, phone, date, time]
   );
 
-  const submit = async () => {
-    if (!canSubmit) {
-      Alert.alert("Missing info", "Please fill name, phone, date and time.");
-      return;
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.replace('/login');
     }
-    const payload = {
-      customerName: customerName.trim(),
-      phone: phone.trim(),
-      service: service.trim() || null,
-      stylist: stylist.trim() || null,
-      date: date.trim(),
-      time: time.trim(),
-      price: price.trim() ? Number(price) : null,
-      notes: notes.trim() || null,
-    };
-    if (payload.price !== null && Number.isNaN(payload.price)) {
-      Alert.alert("Invalid price", "Price must be a number.");
-      return;
-    }
+  }, [isAuthenticated, authLoading]);
 
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Don't render anything if not authenticated (will redirect)
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  const submit = async () => {
+    if (!validateForm()) {
+      Alert.alert("Validation Error", "Please fix the errors before submitting");
+      return;
+    }
+    
     setSubmitting(true);
     try {
-      const res = await api.post("/bookings", payload);
-      router.replace({ pathname: "/success", params: { booking: JSON.stringify(res.data || {}) } });
+      if (!user?.uid) {
+        Alert.alert("Error", "User not authenticated");
+        return;
+      }
+      
+      // Build payload with only non-empty values
+      const payload: any = {
+        customerName: customerName.trim(),
+        phone: phone.trim(),
+        date: date.trim(),
+        time: time.trim(),
+        status: 'pending' as const
+      };
+
+      // Only add optional fields if they have values
+      if (service.trim()) payload.service = service.trim();
+      if (stylist.trim()) payload.stylist = stylist.trim();
+      if (notes.trim()) payload.notes = notes.trim();
+      
+      // Handle price separately to validate it
+      if (price.trim()) {
+        const priceNum = Number(price);
+        if (!isNaN(priceNum)) {
+          payload.price = priceNum;
+        }
+      }
+      
+      const booking = await firebaseService.createBooking(payload, user.uid);
+      router.replace({ pathname: "/success", params: { booking: JSON.stringify(booking) } });
     } catch (e: any) {
-      Alert.alert("Error", e?.response?.data?.error || "Failed to create booking");
+      Alert.alert("Error", e?.message || "Failed to create booking");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
+    <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
-        {/* Top header */}
-        <View style={hdr.wrap}>
-          <Text style={hdr.title}>New booking</Text>
-          <Text style={hdr.subtitle}>Create and confirm a client appointment</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>New Booking</Text>
+          <Text style={styles.subtitle}>Create and confirm a client appointment</Text>
         </View>
 
         <ScrollView
-          contentContainerStyle={s.scroll}
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Customer card */}
-          <Section title="Customer">
-            <Field label="Customer name" required helper="Full name for the booking record">
-              <Input
-                value={customerName}
-                onChangeText={setCustomerName}
-                placeholder="Juan Dela Cruz"
-                autoCapitalize="words"
-              />
-            </Field>
-            <Field label="Phone" required helper="We’ll use this for SMS reminders">
-              <Input
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="09xxxxxxxxx"
-                keyboardType="phone-pad"
-              />
-            </Field>
-          </Section>
+          {/* Customer Information */}
+          <Card style={styles.section}>
+            <Text style={styles.sectionTitle}>Customer Information</Text>
+            
+            <Input
+              label="Customer Name"
+              required
+              value={customerName}
+              onChangeText={setCustomerName}
+              placeholder="Juan Dela Cruz"
+              autoCapitalize="words"
+              error={errors.customerName}
+              helper="Full name for the booking record"
+            />
+            
+            <Input
+              label="Phone Number"
+              required
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="09xxxxxxxxx"
+              keyboardType="phone-pad"
+              error={errors.phone}
+              helper="We'll use this for SMS reminders"
+            />
+          </Card>
 
-          {/* Service card */}
-          <Section title="Service">
-            <Field label="Quick select">
-              <View style={s.rowWrap}>
+          {/* Service Selection */}
+          <Card style={styles.section}>
+            <Text style={styles.sectionTitle}>Service Details</Text>
+            
+            <View style={styles.chipContainer}>
+              <Text style={styles.chipLabel}>Quick Service Selection:</Text>
+              <View style={styles.chipRow}>
                 {SERVICE_OPTIONS.map((opt) => (
-                  <Chip key={opt} selected={service === opt} onPress={() => setService(opt)}>
-                    {opt}
-                  </Chip>
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.chip, service === opt && styles.chipActive]}
+                    onPress={() => setService(opt)}
+                  >
+                    <Text style={[styles.chipText, service === opt && styles.chipTextActive]}>
+                      {opt}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
               </View>
-            </Field>
-            <Field label="Custom service (optional)" helper="Override or add details">
-              <Input
-                value={service}
-                onChangeText={setService}
-                placeholder="e.g., Skin fade + beard trim"
-              />
-            </Field>
-          </Section>
+            </View>
+            
+            <Input
+              label="Custom Service"
+              value={service}
+              onChangeText={setService}
+              placeholder="e.g., Skin fade + beard trim"
+              helper="Override or add details"
+            />
+          </Card>
 
-          {/* Staff & schedule card */}
-          <Section title="Schedule">
-            <Field label="Stylist" helper="Pick a preferred stylist (optional)">
-              <View style={s.rowWrap}>
+          {/* Schedule */}
+          <Card style={styles.section}>
+            <Text style={styles.sectionTitle}>Schedule</Text>
+            
+            <View style={styles.chipContainer}>
+              <Text style={styles.chipLabel}>Preferred Stylist:</Text>
+              <View style={styles.chipRow}>
                 {STYLIST_OPTIONS.map((opt) => (
-                  <Chip key={opt} selected={stylist === opt} onPress={() => setStylist(opt)}>
-                    {opt}
-                  </Chip>
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.chip, stylist === opt && styles.chipActive]}
+                    onPress={() => setStylist(opt)}
+                  >
+                    <Text style={[styles.chipText, stylist === opt && styles.chipTextActive]}>
+                      {opt}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
               </View>
-            </Field>
-            <Field label="Custom stylist (optional)">
-              <Input
-                value={stylist}
-                onChangeText={setStylist}
-                placeholder="Type a name"
-              />
-            </Field>
+            </View>
+            
+            <Input
+              label="Custom Stylist"
+              value={stylist}
+              onChangeText={setStylist}
+              placeholder="Type a name"
+            />
 
-            <Field label="Date" required helper="YYYY-MM-DD">
-              <Input
-                value={date}
-                onChangeText={setDate}
-                placeholder={today()}
-                autoCapitalize="none"
-              />
-            </Field>
+            <Input
+              label="Date"
+              required
+              value={date}
+              onChangeText={setDate}
+              placeholder={today()}
+              autoCapitalize="none"
+              error={errors.date}
+              helper="YYYY-MM-DD format"
+            />
 
-            <Field label="Time" required helper="Scroll to choose a slot">
+            <View style={styles.timeContainer}>
+              <Text style={styles.timeLabel}>Time Slot (Required):</Text>
               <FlatList
                 data={TIMES}
                 keyExtractor={(t) => t}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingVertical: 6 }}
-                ItemSeparatorComponent={() => <View style={{ width: 8 }} />}
+                contentContainerStyle={styles.timeScrollContent}
+                ItemSeparatorComponent={() => <View style={styles.timeSeparator} />}
                 renderItem={({ item }) => (
-                  <Chip selected={time === item} onPress={() => setTime(item)}>
-                    {item}
-                  </Chip>
+                  <TouchableOpacity
+                    style={[styles.timeChip, time === item && styles.timeChipActive]}
+                    onPress={() => setTime(item)}
+                  >
+                    <Text style={[styles.timeChipText, time === item && styles.timeChipTextActive]}>
+                      {item}
+                    </Text>
+                  </TouchableOpacity>
                 )}
               />
-            </Field>
-          </Section>
+              {errors.time && <Text style={styles.errorText}>{errors.time}</Text>}
+            </View>
+          </Card>
 
-          {/* Pricing & notes */}
-          <Section title="Details">
-            <Field label="Price (₱)" helper="Optional; you can set at checkout">
-              <Input
-                value={price}
-                onChangeText={setPrice}
-                placeholder="e.g., 350"
-                keyboardType="numeric"
-              />
-            </Field>
+          {/* Additional Details */}
+          <Card style={styles.section}>
+            <Text style={styles.sectionTitle}>Additional Details</Text>
+            
+            <Input
+              label="Price (₱)"
+              value={price}
+              onChangeText={setPrice}
+              placeholder="e.g., 350"
+              keyboardType="numeric"
+              error={errors.price}
+              helper="Optional; you can set at checkout"
+            />
 
-            <Field label="Notes" helper="Special requests, allergies, etc.">
-              <Input
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Any special requests…"
-                multiline
-                style={{ minHeight: 96, textAlignVertical: "top" }}
-              />
-            </Field>
-          </Section>
+            <Input
+              label="Notes"
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Any special requests, allergies, etc."
+              multiline
+              style={styles.notesInput}
+              helper="Special requests, allergies, etc."
+            />
+          </Card>
 
-          {/* Spacer to avoid overlap with sticky footer */}
-          <View style={{ height: 96 }} />
+          {/* Spacer */}
+          <View style={styles.spacer} />
         </ScrollView>
 
-        <FooterBar>
-          <TouchableOpacity
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Button
+            variant="primary"
+            size="lg"
             onPress={submit}
-            disabled={submitting || !canSubmit}
-            style={[cta.btn, (submitting || !canSubmit) && { opacity: 0.6 }]}
-            activeOpacity={0.85}
+            loading={submitting}
+            disabled={!canSubmit || submitting}
+            style={styles.submitButton}
           >
-            <Text style={cta.text}>{submitting ? "Saving…" : "Create booking"}</Text>
-          </TouchableOpacity>
-        </FooterBar>
+            {submitting ? "Creating Booking..." : "Create Booking"}
+          </Button>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-/* ──────────────────────────────
- * Reusable UI atoms
- * ────────────────────────────── */
-
-function Section({ title, children }: { title: string; children: any }) {
-  return (
-    <View style={card.wrap}>
-      <View style={card.header}>
-        <Text style={card.title}>{title}</Text>
-      </View>
-      <View style={card.body}>{children}</View>
-    </View>
-  );
-}
-
-function Field({
-  label,
-  required,
-  helper,
-  children
-}: {
-  label: string;
-  required?: boolean;
-  helper?: string;
-  children: any;
-}) {
-  return (
-    <View style={{ marginBottom: 14 }}>
-      <View style={fld.row}>
-        <Text style={fld.label}>
-          {label} {required && <Text style={fld.req}>*</Text>}
-        </Text>
-        {helper ? <Text style={fld.helper}>{helper}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
-
-function Input(props: any) {
-  return (
-    <TextInput
-      {...props}
-      placeholderTextColor={t.muted}
-      style={[inp.base, props.style]}
-    />
-  );
-}
-
-function Chip({ children, onPress, selected }: { children: any; onPress: () => void; selected?: boolean }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.85}
-      style={[chip.base, selected ? chip.active : chip.idle]}
-    >
-      <Text style={selected ? chip.activeText : chip.idleText}>{children}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function FooterBar({ children }: { children: any }) {
-  return (
-    <View style={ftr.wrap}>
-      <View style={ftr.inner}>{children}</View>
-    </View>
-  );
-}
-
-/* ──────────────────────────────
- * Theme tokens
- * ────────────────────────────── */
-const t = {
-  bg: "#0f172a0a",        // slate-900 @ 4% overlay
-  card: "#ffffff",
-  ink: "#0f172a",
-  muted: "#6b7280",       // gray-500
-  line: "#e5e7eb",        // gray-200
-  primary: "#111827",     // gray-900 (brand)
-  subtle: "#f8fafc",      // slate-50
-  focus: "#2563eb",       // brand accent for focus
-  radius: 14,
-  radiusLg: 18,
-  shadow: {
-    card: {
-      shadowColor: "#000",
-      shadowOpacity: 0.08,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 8 },
-      elevation: 4
-    }
-  }
-};
-
-/* ──────────────────────────────
- * Styles
- * ────────────────────────────── */
-const hdr = StyleSheet.create({
-  wrap: {
-    paddingHorizontal: 18,
-    paddingTop: 6,
-    paddingBottom: 10,
-    backgroundColor: "#ffffff",
-    borderBottomWidth: 1,
-    borderBottomColor: t.line
-  },
-  title: { fontSize: 22, fontWeight: "800", color: t.ink },
-  subtitle: { marginTop: 2, color: t.muted }
-});
-
-const s = StyleSheet.create({
-  scroll: { padding: 16, gap: 14 },
-  rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-});
-
-const card = StyleSheet.create({
-  wrap: {
-    backgroundColor: t.card,
-    borderRadius: t.radiusLg,
-    borderWidth: 1,
-    borderColor: t.line,
-    ...t.shadow.card,
-    overflow: "hidden"
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: t.subtle,
-    borderBottomWidth: 1,
-    borderBottomColor: t.line
-  },
-  title: { fontSize: 15, fontWeight: "800", color: t.ink, letterSpacing: 0.2, textTransform: "uppercase" },
-  body: { padding: 16 }
-});
-
-const fld = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 },
-  label: { fontSize: 14, fontWeight: "700", color: t.ink },
-  req: { color: "#ef4444" },
-  helper: { fontSize: 12, color: t.muted, marginLeft: 8 }
-});
-
-const inp = StyleSheet.create({
-  base: {
-    borderWidth: 1,
-    borderColor: t.line,
-    backgroundColor: "#fafafa",
-    borderRadius: t.radius,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: t.ink
-  }
-});
-
-const chip = StyleSheet.create({
-  base: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1
-  },
-  idle: { backgroundColor: "#fff", borderColor: t.line },
-  idleText: { color: t.ink, fontWeight: "700" },
-  active: { backgroundColor: t.primary, borderColor: t.primary },
-  activeText: { color: "#fff", fontWeight: "700" }
-});
-
-const cta = StyleSheet.create({
-  btn: {
+const styles = StyleSheet.create({
+  container: {
     flex: 1,
-    backgroundColor: t.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center"
+    backgroundColor: Colors.background,
   },
-  text: { color: "#fff", fontWeight: "800", fontSize: 16, letterSpacing: 0.2 }
-});
-
-const ftr = StyleSheet.create({
-  wrap: {
-    position: "absolute",
-    left: 0, right: 0, bottom: 0,
-    backgroundColor: "rgba(255,255,255,0.95)",
+  keyboardView: {
+    flex: 1,
+  },
+  
+  // Header
+  header: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  title: {
+    fontSize: Typography['2xl'],
+    fontWeight: Typography.bold as any,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
+  },
+  subtitle: {
+    fontSize: Typography.base,
+    color: Colors.textSecondary,
+  },
+  
+  // Scroll view
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: Spacing.lg,
+    gap: Spacing.lg,
+  },
+  
+  // Sections
+  section: {
+    marginBottom: 0,
+  },
+  sectionTitle: {
+    fontSize: Typography.lg,
+    fontWeight: Typography.bold as any,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.lg,
+  },
+  
+  // Chips
+  chipContainer: {
+    marginBottom: Spacing.lg,
+  },
+  chipLabel: {
+    fontSize: Typography.sm,
+    fontWeight: Typography.semibold as any,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  chip: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  chipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  chipText: {
+    fontSize: Typography.sm,
+    fontWeight: Typography.semibold as any,
+    color: Colors.textPrimary,
+  },
+  chipTextActive: {
+    color: Colors.white,
+  },
+  
+  // Time selection
+  timeContainer: {
+    marginTop: Spacing.md,
+  },
+  timeLabel: {
+    fontSize: Typography.sm,
+    fontWeight: Typography.semibold as any,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+  },
+  timeScrollContent: {
+    paddingVertical: Spacing.sm,
+  },
+  timeSeparator: {
+    width: Spacing.sm,
+  },
+  timeChip: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  timeChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  timeChipText: {
+    fontSize: Typography.sm,
+    fontWeight: Typography.semibold as any,
+    color: Colors.textPrimary,
+  },
+  timeChipTextActive: {
+    color: Colors.white,
+  },
+  
+  // Error text
+  errorText: {
+    fontSize: Typography.sm,
+    color: Colors.error,
+    marginTop: Spacing.xs,
+  },
+  
+  // Notes input
+  notesInput: {
+    minHeight: 96,
+    textAlignVertical: 'top',
+  },
+  
+  // Spacer
+  spacer: {
+    height: 100,
+  },
+  
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: Typography.base,
+    color: Colors.textSecondary,
+  },
+  
+  // Footer
+  footer: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: t.line
+    borderTopColor: Colors.border,
   },
-  inner: {
-    padding: 16,
-  }
+  submitButton: {
+    width: '100%',
+  },
 });

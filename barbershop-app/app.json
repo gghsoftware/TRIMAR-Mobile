@@ -7,17 +7,28 @@
     "icon": "./assets/icon.png",
     "entryPoint": "expo-router/entry",
     "plugins": ["expo-router"],
+    "ios": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app needs camera access for AR hairstyle try-on features.",
+        "NSMicrophoneUsageDescription": "This app needs microphone access for AR features."
+      }
+    },
     "android": {
-      "package": "com.gghsoftware.barbershop",
+      "package": "com.arisrobles.trimarmobile",
       "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       }
     },
     "extra": {
-      "API_URL": "https://4e74c741eba8.ngrok-free.app",
-      "eas": { "projectId": "208083f8-87b5-4e85-96a7-3d0c641b494f" }
+      "eas": { "projectId": "022b04aa-d948-4abd-bdd9-f74c7178628f" }
     }
   }
 }

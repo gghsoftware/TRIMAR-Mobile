@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 
 export default function Success() {
   const { booking } = useLocalSearchParams();
-  const data = booking ? JSON.parse(booking) : null;
+  const data = booking && typeof booking === 'string' ? JSON.parse(booking) : null;
 
   return (
     <View style={s.container}>
