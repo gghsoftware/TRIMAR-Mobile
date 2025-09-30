@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import api from "../lib/api";
+import AuthGuard from "../components/AuthGuard";
 
 const today = () => {
   const d = new Date();
@@ -26,7 +27,7 @@ const TIMES = Array.from({ length: (18 - 9) * 2 + 1 }, (_, i) => {
   return `${h}:${m}`;
 });
 
-export default function NewBooking() {
+function NewBookingContent() {
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
   const [service, setService] = useState("");
@@ -407,3 +408,11 @@ const ftr = StyleSheet.create({
     padding: 16,
   }
 });
+
+export default function NewBooking() {
+  return (
+    <AuthGuard>
+      <NewBookingContent />
+    </AuthGuard>
+  );
+}

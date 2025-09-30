@@ -17,6 +17,8 @@ import {
 import { router } from "expo-router";
 import { WebView } from "react-native-webview";
 import api from "../lib/api";
+import AuthGuard from "../components/AuthGuard";
+import { useAuth } from "../contexts/AuthContext";
 
 const AR_URL =
   process.env.EXPO_PUBLIC_AR_URL ||
@@ -29,7 +31,8 @@ const today = () => {
   return `${d.getFullYear()}-${m}-${day}`;
 };
 
-export default function Index() {
+function IndexContent() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [bookings, setBookings] = useState([]);
   const [error, setError] = useState(null);
@@ -117,7 +120,15 @@ export default function Index() {
           </TouchableOpacity>
         </View>
 
-        <Text style={s.countText}>{countText}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <Text style={s.countText}>{countText}</Text>
+          <TouchableOpacity
+            style={s.profileBtn}
+            onPress={() => router.push("/profile")}
+          >
+            <Text style={s.profileBtnText}>{user?.name?.charAt(0)?.toUpperCase() || 'U'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Filters */}
@@ -366,6 +377,14 @@ function WebsiteModal({ visible, onClose, url }) {
   );
 }
 
+export default function Index() {
+  return (
+    <AuthGuard>
+      <IndexContent />
+    </AuthGuard>
+  );
+}
+
 const s = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: "#fff" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -376,6 +395,19 @@ const s = StyleSheet.create({
     marginBottom: 10,
   },
   countText: { fontWeight: "700", color: "#374151" },
+  profileBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#111827",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
+  },
   filters: { flexDirection: "row", marginBottom: 10 },
   filterButtons: { flexDirection: "row", gap: 8, marginBottom: 12 },
   label: {
